@@ -1,0 +1,36 @@
+<#
+.SYNOPSIS
+    Aplica políticas de controle de acesso (IP/User) em Relying Parties do AD FS.
+.EXAMPLE
+    .\Set-AdfsAccessControl.ps1 -RelyingParty "Microsoft Office 365 Identity Platform" -PolicyName "Permit only Corporate IP"
+#>
+param(
+    [Parameter(Mandatory=$true)]
+    [string]$RelyingPartyName,
+
+    [Parameter(Mandatory=$true)]
+    [string]$PolicyName
+)
+
+Write-Host "Buscando Trust: $RelyingPartyName..." -ForegroundColor Gray
+$Trust = Get-AdfsRelyingPartyTrust -Name $RelyingPartyName -ErrorAction SilentlyContinue
+
+if ($Trust) {
+    Write-Host "Aplicando política: '$PolicyName'..." -ForegroundColor Yellow
+    try {
+        Set-AdfsRelyingPartyTrust -TargetRelyingParty $Trust -AccessControlPolicyName $PolicyName -ErrorAction Stop
+        
+        # Validação
+        $Check = Get-AdfsRelyingPartyTrust -Name $RelyingPartyName
+        if ($Check.AccessControlPolicyName -eq $PolicyName) {
+            Write-Host "Sucesso! Política aplicada." -ForegroundColor Green
+        }
+    }
+    catch {
+        Write-Host "Erro ao aplicar política. Verifique se o nome da política existe no AD FS." -ForegroundColor Red
+        Write-Host $_.Exception.Message
+    }
+}
+else {
+    Write-Host "Relying Party não encontrada." -ForegroundColor Red
+}
