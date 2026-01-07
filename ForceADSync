@@ -1,0 +1,39 @@
+<#
+.SYNOPSIS
+    Força a ressincronização completa de hashes de senha no AD Connect.
+.DESCRIPTION
+    Útil quando usuários reclamam que a senha do 365 não bate com o AD local,
+    mesmo após replicação Delta. Desativa e Reativa o PHS.
+#>
+param(
+    [string]$ADConnectorName,  # Ex: "empresa.local"
+    [string]$AADConnectorName  # Ex: "empresa.onmicrosoft.com - AAD"
+)
+
+Import-Module ADSync
+
+# Tenta descobrir os conectores se não forem passados
+if (-not $ADConnectorName) {
+    $ADConnectorName = (Get-ADSyncConnector | Where-Object Type -eq "AD").Name
+}
+if (-not $AADConnectorName) {
+    $AADConnectorName = (Get-ADSyncConnector | Where-Object Type -eq "Extensible2").Name
+}
+
+Write-Host "Conector AD Local: $ADConnectorName" -ForegroundColor Cyan
+Write-Host "Conector Azure AD: $AADConnectorName" -ForegroundColor Cyan
+
+# Passo 1: Configura ForceFullPasswordSync
+$c = Get-ADSyncConnector -Name $ADConnectorName
+$p = New-Object Microsoft.IdentityManagement.PowerShell.ObjectModel.ConfigurationParameter "Microsoft.Synchronize.ForceFullPasswordSync", String, ConnectorGlobal, $null, $null, $null
+$p.Value = 1
+$c.GlobalParameters.Remove($p.Name)
+$c.GlobalParameters.Add($p)
+Add-ADSyncConnector -Connector $c | Out-Null
+
+# Passo 2: Desliga e Liga o Sync de Senha (Trigger)
+Write-Host "Reiniciando ciclo de senhas..." -ForegroundColor Yellow
+Set-ADSyncAADPasswordSyncConfiguration -SourceConnector $ADConnectorName -TargetConnector $AADConnectorName -Enable $false
+Set-ADSyncAADPasswordSyncConfiguration -SourceConnector $ADConnectorName -TargetConnector $AADConnectorName -Enable $true
+
+Write-Host "Processo concluído. Verifique o Event Viewer para confirmação." -ForegroundColor Green
